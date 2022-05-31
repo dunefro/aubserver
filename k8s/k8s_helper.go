@@ -32,7 +32,7 @@ func getk8sclient() (*kubernetes.Clientset, error) {
 	return clientset, err
 }
 
-func GetFailedPods() ([]v1.Pod, error) {
+func GetPods() ([]v1.Pod, error) {
 	k8sClient, err := getk8sclient()
 	if err != nil {
 		panic(err.Error())
