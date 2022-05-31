@@ -1,68 +1,74 @@
 package main
 
 import (
-	"context"
-	"flag"
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
-	"strings"
-	"text/tabwriter"
+	"bytes"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
+	"fmt"
+	"strings"
+	"text/tabwriter"
+
+	k8s "github.com/dunefro/aubserver/k8s"
+	slack "github.com/dunefro/aubserver/slack"
+	v1 "k8s.io/api/core/v1"
 )
 
-func getk8sClient() (*kubernetes.Clientset, error) {
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
-
-	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	// create the clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	return clientset, err
-}
-
-func printPodStatus(table [][]string) {
-	writer := tabwriter.NewWriter(os.Stdout, 0, 8, 1, '\t', tabwriter.TabIndent|tabwriter.Debug)
-	for _, line := range table {
-		fmt.Fprintln(writer, strings.Join(line, "\t")+"\t")
+func getFormattedPodStatus(table []k8s.K8sPod) string {
+	var buf bytes.Buffer
+	writer := tabwriter.NewWriter(&buf, 0, 8, 4, ' ', tabwriter.TabIndent)
+	fmt.Fprintln(writer, strings.Join([]string{"Pod", "Namespace", "Container", "Status", "Reason", "Message"}, "\t")+"\t")
+	for _, p := range table {
+		for _, c := range p.Containers {
+			fmt.Fprintln(writer, strings.Join([]string{p.Name, p.Namespace, c.Name, c.Status, c.Reason, c.Message}, "\t")+"\t")
+		}
 	}
 	writer.Flush()
+	return buf.String()
+}
+
+func listFailedPods(pods []v1.Pod) []k8s.K8sPod {
+	failedPods := make([]k8s.K8sPod, 0, len(pods))
+	for _, pod := range pods {
+		failedContainers := make([]k8s.PodContainer, 0, len(pod.Status.ContainerStatuses))
+		for _, container := range pod.Status.ContainerStatuses {
+			if container.State.Running == nil {
+				if container.State.Waiting != nil {
+					failedContainers = append(failedContainers, k8s.PodContainer{
+						Name:    container.Name,
+						Status:  "Waiting",
+						Reason:  container.State.Waiting.Reason,
+						Message: container.State.Waiting.Message,
+					})
+				}
+			}
+		}
+		// if there is any failed container then append the pod in the failedPod list
+		if len(failedContainers) != 0 {
+			failedPods = append(failedPods, k8s.K8sPod{
+				Name:       pod.Name,
+				Namespace:  pod.Namespace,
+				Containers: failedContainers,
+			})
+		}
+	}
+	return failedPods
 }
 
 func main() {
-	k8sClient, err := getk8sClient()
-	if err != nil {
-		panic(err.Error())
-	}
-
 	for {
-		pods, err := k8sClient.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+		pods, err := k8s.GetPods()
 		if err != nil {
-			log.Println(err.Error())
+			panic(err.Error())
 		}
-		var k8sPod = make([][]string, len(pods.Items))
-		for index, pod := range pods.Items {
-			k8sPod[index] = []string{pod.Name, string(pod.Status.Phase)}
+		failedPods := listFailedPods(pods)
+		// if there is any failed pod, only then send the message on slack
+		if len(failedPods) != 0 {
+			slackMessge := fmt.Sprintln(getFormattedPodStatus(failedPods))
+			slack.SendSlackNotification(slackMessge)
+		} else {
+			fmt.Println("All well !!")
 		}
-		printPodStatus(k8sPod)
-		log.Printf("There are %d pods in the cluster\n", len(pods.Items))
-		log.Println("Sleeping ...")
-		time.Sleep(20 * time.Second)
+		fmt.Println("Sleeping ...")
+		time.Sleep(60 * time.Second)
 	}
 }

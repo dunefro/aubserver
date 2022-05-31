@@ -1,0 +1,5 @@
+1. It should scan all the pods [DONE]
+2. List all the pods in the running state and display them in the application output [REMOVED]
+3. List all the non-running pods in the application output [REMOVED]
+4. Send notification of all the pods that are not in the running state. [DONE]
+5. Generate a red symbol for all of them. [DONE]
