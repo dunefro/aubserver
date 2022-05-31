@@ -54,7 +54,7 @@ spec:
     spec:
       serviceAccountName: aubserver-serviceaccount
       containers:
-      - image: quay.io/vedant99/aubserver:v0.1.0-alpha.1
+      - image: quay.io/vedant99/aubserver:v0.1.0
         imagePullPolicy: Always
         name: aubserver
         env:
