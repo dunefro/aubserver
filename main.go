@@ -55,8 +55,12 @@ func listFailedPods(pods []v1.Pod) []k8s.K8sPod {
 }
 
 func main() {
+	k8sClient, err := k8s.Getk8sclient()
+	if err != nil {
+		panic(err.Error())
+	}
 	for {
-		pods, err := k8s.GetPods()
+		pods, err := k8s.GetPods(k8sClient)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -64,11 +68,15 @@ func main() {
 		// if there is any failed pod, only then send the message on slack
 		if len(failedPods) != 0 {
 			slackMessge := fmt.Sprintln(getFormattedPodStatus(failedPods))
-			slack.SendSlackNotification(slackMessge)
+			timestamp, err := slack.SendSlackNotification(slackMessge)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			fmt.Println("Message send to slack at timestamp", timestamp)
 		} else {
 			fmt.Println("All well !!")
 		}
 		fmt.Println("Sleeping ...")
-		time.Sleep(60 * time.Second)
+		time.Sleep(6 * time.Second)
 	}
 }
