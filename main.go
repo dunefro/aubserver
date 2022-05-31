@@ -77,6 +77,6 @@ func main() {
 			fmt.Println("All well !!")
 		}
 		fmt.Println("Sleeping ...")
-		time.Sleep(6 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }
