@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  creationTimestamp: null
+  name: aubserver-serviceaccount
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: aubserver-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/status
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  creationTimestamp: null
+  name: aubserver-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aubserver-role
+subjects:
+- kind: ServiceAccount
+  name: aubserver-serviceaccount
+  namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: aubserver
+  name: aubserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aubserver
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: aubserver
+    spec:
+      serviceAccountName: aubserver-serviceaccount
+      containers:
+      - image: quay.io/vedant99/aubserver:v0.1.0-alpha.1
+        imagePullPolicy: Always
+        name: aubserver
+        env:
+          - name: AUB__CHANNEL_ID
+            valueFrom:
+              secretKeyRef:
+                name: slack-credentials
+                key: workspace-id
+                optional: false            
+          - name: AUB__SLACK_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: slack-credentials
+                key: slack-token
+                optional: false 
+        resources: {}
+status: {}
